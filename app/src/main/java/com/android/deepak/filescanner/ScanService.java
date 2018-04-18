@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -42,7 +43,7 @@ public class ScanService extends Service {
     private static final int PROGRESS_NOTIFICATION_ID = 0;
     private static final int FINISHED_NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID_DEFAULT = "default";
-    private ArrayList<File> fileList;
+    private List<FileData> fileList;
     private long totalSize = 0;
     private long fileNo = 0;
     private long scanSize = 0;
@@ -89,10 +90,10 @@ public class ScanService extends Service {
 
         if (ACTION_SCAN.equals(intent.getAction())) {
             if (startScan()) {
-                Collections.sort(fileList, new Comparator<File>() {
+                Collections.sort(fileList, new Comparator<FileData>() {
                     @Override
-                    public int compare(File o1, File o2) {
-                        return (int) (o1.length() - o2.length());
+                    public int compare(FileData o1, FileData o2) {
+                        return (int) (o2.getFilesize() - o1.getFilesize());
                     }
                 });
                 Log.e("FileList", fileList.toString());
@@ -124,7 +125,7 @@ public class ScanService extends Service {
                 if (file.isFile()) {
                     fileNo++;
                     scanSize += busyMemory(file);
-                    fileList.add(file);
+                    fileList.add(new FileData(file.getName(), file.length(), getExt(file.getAbsolutePath())));
                     broadcastScanProgress(scanSize, totalSize);
                     showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
                 } else {
@@ -134,12 +135,20 @@ public class ScanService extends Service {
         } else if (dir.isFile()) {
             fileNo++;
             scanSize += busyMemory(dir);
-            fileList.add(dir);
+            fileList.add(new FileData(dir.getName(), dir.length(), getExt(dir.getAbsolutePath())));
             broadcastScanProgress(scanSize, totalSize);
             showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
         }
 
         return true;
+    }
+
+
+    public String getExt(String filePath) {
+        int strLength = filePath.lastIndexOf(".");
+        if (strLength > 0)
+            return filePath.substring(strLength + 1).toLowerCase();
+        return null;
     }
 
     /**
@@ -205,7 +214,7 @@ public class ScanService extends Service {
         String action = success ? SCAN_COMPLETED : SCAN_ABORT;
 
         Intent broadcast = new Intent(action)
-                .putParcelableArrayListExtra(EXTRA_LARGE_FILES, )
+                .putParcelableArrayListExtra(EXTRA_LARGE_FILES, getTop10FileBySize())
                 .putParcelableArrayListExtra(EXTRA_EXT_FREQ, )
                 .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize());
         return LocalBroadcastManager.getInstance(getApplicationContext())
@@ -220,13 +229,21 @@ public class ScanService extends Service {
         dismissProgressNotification();
 
         Intent intent = new Intent(this, MainActivity.class)
-                /*.putParcelableArrayListExtra(EXTRA_LARGE_FILES, )
+                .putParcelableArrayListExtra(EXTRA_LARGE_FILES, getTop10FileBySize())
                 .putParcelableArrayListExtra(EXTRA_EXT_FREQ, )
-                .putExtra(EXTRA_AVG_FILESIZE, )*/
+                .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize())
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
         String caption = success ? getString(R.string.scan_success) : getString(R.string.scan_abort);
         showFinishedNotification(caption, intent, true);
+    }
+
+    private ArrayList<FileData> getTop10FileBySize() {
+        if (fileList.size() > 10) {
+            return new ArrayList<>(fileList.subList(0, 9));
+        } else {
+            return new ArrayList<>(fileList);
+        }
     }
 
     /**
