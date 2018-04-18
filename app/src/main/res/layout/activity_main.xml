@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/pad_16">
+
+
+        <android.support.v7.widget.AppCompatTextView
+            android:id="@+id/scan_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/mar_8"
+            android:text="@string/scan_title" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="@dimen/mar_8"
+            android:gravity="center">
+
+            <ProgressBar
+                android:id="@+id/progressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="150dp"
+                android:layout_height="150dp"
+                android:layout_gravity="center"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="10"
+                android:progressDrawable="@drawable/progressbar" />
+
+            <android.support.v7.widget.AppCompatTextView
+                android:id="@+id/progress_data"
+                android:layout_width="70dp"
+                android:layout_height="70dp"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:text="10%"
+                android:textColor="@color/colorPrimary"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+        </FrameLayout>
+
+
+        <android.support.v7.widget.AppCompatButton
+            android:id="@+id/start_stop_scan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:drawableLeft="@drawable/ic_play_arrow"
+            android:drawableStart="@drawable/ic_play_arrow"
+            android:text="@string/scan" />
+
+        <LinearLayout
+            android:id="@+id/scan_data_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/mar_8"
+            android:orientation="vertical">
+
+            <android.support.v7.widget.AppCompatTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/yellow"
+                android:gravity="center"
+                android:padding="@dimen/pad_8"
+                android:text="@string/large_files_title"
+                android:textColor="@android:color/black"
+                android:textSize="@dimen/text_16"
+                android:textStyle="bold" />
+
+            <TableLayout
+                android:id="@+id/large_files_table"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/mar_4"
+                android:stretchColumns="*" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/mar_8">
+
+                <android.support.v7.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="@dimen/mar_8"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:padding="@dimen/pad_4"
+                    android:text="@string/avg_file_size_title"
+                    android:textColor="@android:color/black"
+                    android:textSize="@dimen/text_14"
+                    android:textStyle="bold" />
+
+                <android.support.v7.widget.AppCompatTextView
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:text="15MB"
+                    android:textColor="@android:color/black"
+                    android:textSize="@dimen/text_14"
+                    android:textStyle="italic" />
+            </LinearLayout>
+
+            <android.support.v7.widget.AppCompatTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@color/yellow"
+                android:gravity="center"
+                android:padding="@dimen/pad_8"
+                android:text="@string/freq_file_ext"
+                android:textColor="@android:color/black"
+                android:textSize="@dimen/text_16"
+                android:textStyle="bold" />
+
+            <TableLayout
+                android:id="@+id/files_ext_table"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/mar_4"
+                android:stretchColumns="*" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+
+</ScrollView>

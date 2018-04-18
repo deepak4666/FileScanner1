@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">FileScanner</string>
+    <string name="start">start</string>
+    <string name="scan_title">Scan your External Directory.</string>
+    <string name="stop">stop</string>
+    <string name="scan">scan</string>
+    <string name="large_files_title">Top 10 large files in External Storage</string>
+    <string name="avg_file_size_title">Average File Size : </string>
+    <string name="freq_file_ext">5 most frequent File extensions.</string>
+    <string name="scan_success">Scan Successfully..!</string>
+    <string name="scan_abort">Scan Cancelled...!</string>
+    <string name="no_storage">No external Storage found..!</string>
+    <string name="app_exit_alert">Scan will stop. Do you really want to exit..?</string>
+    <string name="alert">Alert</string>
+</resources>
