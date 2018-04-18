@@ -29,6 +29,7 @@ import static com.android.deepak.filescanner.BundleKeys.EXTRA_AVG_FILESIZE;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_EXT_FREQ;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_LARGE_FILES;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_SCAN_PROGERESS;
+import static com.android.deepak.filescanner.BundleKeys.KEY_MSG;
 
 public class ScanService extends Service {
 
@@ -37,22 +38,21 @@ public class ScanService extends Service {
      **/
     public static final String ACTION_SCAN = "action_scan";
     public static final String SCAN_COMPLETED = "scan_completed";
-    public static final String SCAN_ABORT = "scan_abort";
     public static final String SCAN_PROGRESS = "scan_progress";
     private static final String TAG = ScanService.class.getSimpleName();
     private static final int PROGRESS_NOTIFICATION_ID = 0;
     private static final int FINISHED_NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID_DEFAULT = "default";
     private List<FileData> fileList;
+    private List<String> extensionList;
+    private List<ExtnFrequency> extnList;
     private long totalSize = 0;
-    private long fileNo = 0;
     private long scanSize = 0;
-    private FileExtensionFilter fileExtensionFilter;
+    private Set<String> extensionSet;
 
     public static IntentFilter getIntentFilter() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(SCAN_COMPLETED);
-        filter.addAction(SCAN_ABORT);
 
         return filter;
     }
@@ -74,8 +74,7 @@ public class ScanService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        fileList = new ArrayList<>();
-        fileExtensionFilter = new FileExtensionFilter();
+
     }
 
     @Nullable
@@ -89,6 +88,10 @@ public class ScanService extends Service {
         Log.d(TAG, "onStartCommand:" + intent + ":" + startId);
 
         if (ACTION_SCAN.equals(intent.getAction())) {
+            fileList = new ArrayList<>();
+            extensionSet = new HashSet<>();
+            extnList = new ArrayList<>();
+            extensionList = new ArrayList<>();
             if (startScan()) {
                 Collections.sort(fileList, new Comparator<FileData>() {
                     @Override
@@ -97,6 +100,19 @@ public class ScanService extends Service {
                     }
                 });
                 Log.e("FileList", fileList.toString());
+
+                extensionSet = new HashSet<>(extensionList);
+                int freq;
+                for (String ext : extensionSet) {
+                    freq = Collections.frequency(extensionList, ext);
+                    extnList.add(new ExtnFrequency(ext, freq));
+                }
+                Collections.sort(extnList, new Comparator<ExtnFrequency>() {
+                    @Override
+                    public int compare(ExtnFrequency ef1, ExtnFrequency ef2) {
+                        return ef2.getFrequency() - ef1.getFrequency();
+                    }
+                });
             }
         }
 
@@ -119,25 +135,19 @@ public class ScanService extends Service {
     }
 
     public boolean listFilesAndFilesSubDirectories(File dir) {
-        Set<String> extensions = new HashSet<String>();
-        if (dir.isDirectory()) {
-            for (File file : dir.listFiles(fileExtensionFilter)) {
-                if (file.isFile()) {
-                    fileNo++;
-                    scanSize += busyMemory(file);
-                    fileList.add(new FileData(file.getName(), file.length(), getExt(file.getAbsolutePath())));
-                    broadcastScanProgress(scanSize, totalSize);
-                    showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
-                } else {
-                    listFilesAndFilesSubDirectories(file);
+        if (dir != null && dir.canRead()) {
+            if (dir.isDirectory()) {
+                //noinspection ConstantConditions
+                for (File file : dir.listFiles()) {
+                    if (file.isFile()) {
+                        readFileData(file);
+                    } else {
+                        listFilesAndFilesSubDirectories(file);
+                    }
                 }
+            } else if (dir.isFile()) {
+                readFileData(dir);
             }
-        } else if (dir.isFile()) {
-            fileNo++;
-            scanSize += busyMemory(dir);
-            fileList.add(new FileData(dir.getName(), dir.length(), getExt(dir.getAbsolutePath())));
-            broadcastScanProgress(scanSize, totalSize);
-            showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
         }
 
         return true;
@@ -149,6 +159,14 @@ public class ScanService extends Service {
         if (strLength > 0)
             return filePath.substring(strLength + 1).toLowerCase();
         return null;
+    }
+
+    public void readFileData(File file) {
+        scanSize += busyMemory(file);
+        fileList.add(new FileData(file.getName(), file.length()));
+        extensionList.add(getExt(file.getAbsolutePath()));
+        broadcastScanProgress(scanSize, totalSize);
+        showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
     }
 
     /**
@@ -167,6 +185,7 @@ public class ScanService extends Service {
                 .setContentText(caption)
                 .setProgress(100, percentComplete, false)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
                 .setAutoCancel(false);
 
         NotificationManager manager =
@@ -177,15 +196,13 @@ public class ScanService extends Service {
         }
     }
 
-    protected void showFinishedNotification(String caption, Intent intent, boolean success) {
+    protected void showFinishedNotification(String caption, Intent intent) {
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0 /* requestCode */, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT);
 
-        int icon = success ? R.drawable.ic_check_white_24 : R.drawable.ic_error_white_24dp;
-
         createDefaultChannel();
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID_DEFAULT)
-                .setSmallIcon(icon)
+                .setSmallIcon(R.drawable.ic_check_white_24)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(caption)
                 .setAutoCancel(true)
@@ -210,32 +227,31 @@ public class ScanService extends Service {
                 .sendBroadcast(broadcast);
     }
 
-    private boolean broadcastScanFinished(boolean success) {
-        String action = success ? SCAN_COMPLETED : SCAN_ABORT;
-
-        Intent broadcast = new Intent(action)
+    private boolean broadcastScanFinished() {
+        Intent broadcast = new Intent(SCAN_COMPLETED)
                 .putParcelableArrayListExtra(EXTRA_LARGE_FILES, getTop10FileBySize())
-                .putParcelableArrayListExtra(EXTRA_EXT_FREQ, )
-                .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize());
+                .putParcelableArrayListExtra(EXTRA_EXT_FREQ, getTop5FreqExt())
+                .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize())
+                .putExtra(KEY_MSG, getString(R.string.scan_success));
         return LocalBroadcastManager.getInstance(getApplicationContext())
                 .sendBroadcast(broadcast);
     }
 
     private long getAvgFileSize() {
-        return totalSize / fileNo;
+        return totalSize / fileList.size();
     }
 
-    private void showScanFinishedNotification(boolean success) {
+    private void showScanFinishedNotification() {
         dismissProgressNotification();
-
         Intent intent = new Intent(this, MainActivity.class)
+                .setAction(SCAN_COMPLETED)
                 .putParcelableArrayListExtra(EXTRA_LARGE_FILES, getTop10FileBySize())
-                .putParcelableArrayListExtra(EXTRA_EXT_FREQ, )
+                .putParcelableArrayListExtra(EXTRA_EXT_FREQ, getTop5FreqExt())
                 .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize())
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                .putExtra(KEY_MSG, getString(R.string.scan_success));
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
-        String caption = success ? getString(R.string.scan_success) : getString(R.string.scan_abort);
-        showFinishedNotification(caption, intent, true);
+        showFinishedNotification(getString(R.string.scan_success), intent);
     }
 
     private ArrayList<FileData> getTop10FileBySize() {
@@ -246,9 +262,14 @@ public class ScanService extends Service {
         }
     }
 
-    /**
-     * Dismiss the progress notification.
-     */
+    private ArrayList<ExtnFrequency> getTop5FreqExt() {
+        if (extnList.size() > 5) {
+            return new ArrayList<>(extnList.subList(0, 4));
+        } else {
+            return new ArrayList<>(extnList);
+        }
+    }
+
     protected void dismissProgressNotification() {
         NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

@@ -9,4 +9,5 @@ public interface BundleKeys {
     String EXTRA_EXT_FREQ = "extra_extension_freq";
     String EXTRA_AVG_FILESIZE = "extra_avg_filesize";
     String EXTRA_SCAN_PROGERESS = "scan_progress";
+    String KEY_MSG = "message";
 }

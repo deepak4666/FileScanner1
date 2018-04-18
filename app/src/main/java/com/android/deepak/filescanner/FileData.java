@@ -24,12 +24,11 @@ return (new FileData[size]);
 ;
 private String filename;
 private long filesize;
-private String extension;
 
 protected FileData(Parcel in) {
 this.filename = ((String) in.readValue((String.class.getClassLoader())));
 this.filesize = ((long) in.readValue((long.class.getClassLoader())));
-this.extension = ((String) in.readValue((String.class.getClassLoader())));
+
 }
 
 /**
@@ -41,15 +40,14 @@ public FileData() {
 
 /**
 * 
-* @param extension
+*
 * @param filesize
 * @param filename
 */
-public FileData(String filename, long filesize, String extension) {
+public FileData(String filename, long filesize) {
 super();
 this.filename = filename;
 this.filesize = filesize;
-this.extension = extension;
 }
 
 public String getFilename() {
@@ -68,18 +66,10 @@ public void setFilesize(long filesize) {
 this.filesize = filesize;
 }
 
-public String getExtension() {
-return extension;
-}
-
-public void setExtension(String extension) {
-this.extension = extension;
-}
 
 public void writeToParcel(Parcel dest, int flags) {
 dest.writeValue(filename);
 dest.writeValue(filesize);
-dest.writeValue(extension);
 }
 
 public int describeContents() {

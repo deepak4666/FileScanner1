@@ -12,4 +12,6 @@
     <string name="no_storage">No external Storage found..!</string>
     <string name="app_exit_alert">Scan will stop. Do you really want to exit..?</string>
     <string name="alert">Alert</string>
+    <string name="permission_required_explanation">Read permission is required to read the files from your storage.</string>
+    <string name="permission_req">Permission Required</string>
 </resources>

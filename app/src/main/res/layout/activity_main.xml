@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.v4.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:nestedScrollingEnabled="true"
     tools:context=".MainActivity">
 
     <LinearLayout
@@ -77,12 +78,12 @@
                 android:textSize="@dimen/text_16"
                 android:textStyle="bold" />
 
-            <TableLayout
-                android:id="@+id/large_files_table"
+            <ListView
+                android:id="@+id/large_files_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/mar_4"
-                android:stretchColumns="*" />
+                tools:listitem="@layout/list_item" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -123,16 +124,16 @@
                 android:textSize="@dimen/text_16"
                 android:textStyle="bold" />
 
-            <TableLayout
-                android:id="@+id/files_ext_table"
+            <ListView
+                android:id="@+id/files_ext_list"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/mar_4"
-                android:stretchColumns="*" />
+                tools:listitem="@layout/list_item" />
 
         </LinearLayout>
 
     </LinearLayout>
 
 
-</ScrollView>
+</android.support.v4.widget.NestedScrollView>
