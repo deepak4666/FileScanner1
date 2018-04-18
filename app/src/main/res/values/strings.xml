@@ -14,4 +14,5 @@
     <string name="alert">Alert</string>
     <string name="permission_required_explanation">Read permission is required to read the files from your storage.</string>
     <string name="permission_req">Permission Required</string>
+    <string name="crash_toast_text">App Crashed</string>
 </resources>

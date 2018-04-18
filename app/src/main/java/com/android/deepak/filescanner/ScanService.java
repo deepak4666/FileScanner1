@@ -10,7 +10,6 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
-import android.os.StatFs;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.content.LocalBroadcastManager;
@@ -53,6 +52,7 @@ public class ScanService extends Service {
     public static IntentFilter getIntentFilter() {
         IntentFilter filter = new IntentFilter();
         filter.addAction(SCAN_COMPLETED);
+        filter.addAction(SCAN_PROGRESS);
 
         return filter;
     }
@@ -122,17 +122,11 @@ public class ScanService extends Service {
     private boolean startScan() {
         fileList = new ArrayList<>();
         File root = Environment.getExternalStorageDirectory();
-        totalSize = busyMemory(root);
+        totalSize = root.length();
         return listFilesAndFilesSubDirectories(root);
 
     }
 
-    public long busyMemory(File file) {
-        StatFs statFs = new StatFs(file.getAbsolutePath());
-        long total = (statFs.getBlockCount() * statFs.getBlockSize());
-        long free = (statFs.getAvailableBlocks() * statFs.getBlockSize());
-        return total - free;
-    }
 
     public boolean listFilesAndFilesSubDirectories(File dir) {
         if (dir != null && dir.canRead()) {
@@ -162,11 +156,11 @@ public class ScanService extends Service {
     }
 
     public void readFileData(File file) {
-        scanSize += busyMemory(file);
+        scanSize += file.length();
         fileList.add(new FileData(file.getName(), file.length()));
         extensionList.add(getExt(file.getAbsolutePath()));
         broadcastScanProgress(scanSize, totalSize);
-        showProgressNotification(String.format(Locale.getDefault(), "Scanning %d Files from %d", scanSize, totalSize), scanSize, totalSize);
+        showProgressNotification(String.format(Locale.getDefault(), "%d/ %d", scanSize, totalSize), scanSize, totalSize);
     }
 
     /**

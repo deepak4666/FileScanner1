@@ -1,5 +1,6 @@
 package com.android.deepak.filescanner;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -12,6 +13,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.AppCompatButton;
@@ -97,7 +99,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 switch (intent.getAction()) {
                     case SCAN_COMPLETED:
                         updateProgress(100);
-                        isScanning= false;
+                        isScanning = false;
                         onScanResultIntent(intent);
                         break;
 
@@ -143,7 +145,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     protected void showPermissionSnackbar() {
-        showMessageDialog(getString(R.string.permission_req),getString(R.string.permission_required_explanation),
+        showMessageDialog(getString(R.string.permission_req), getString(R.string.permission_required_explanation),
                 new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialogInterface, int i) {
@@ -194,8 +196,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private void initVar() {
         mDataContainer = findViewById(R.id.scan_data_container);
         mProgressBar = findViewById(R.id.progressBar);
-        mFilesListView = findViewById(R.id.large_files_table);
-        mExtListView = findViewById(R.id.files_ext_table);
+        mFilesListView = findViewById(R.id.large_files_list);
+        mExtListView = findViewById(R.id.files_ext_list);
         mScanStopBtn = findViewById(R.id.start_stop_scan);
         mScanStopBtn.setOnClickListener(this);
     }
@@ -206,9 +208,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         switch (v.getId()) {
 
             case R.id.start_stop_scan:
+                if (!isRequestPermissionAllow(MainActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE})) {
+                    return;
+                }
+
                 Intent intent;
                 isScanning = !isScanning;
                 if (isScanning) {
+
+
                     String sdCardState = Environment.getExternalStorageState();
                     if (!sdCardState.equals(Environment.MEDIA_MOUNTED)) {
                         Toast.makeText(MainActivity.this, getString(R.string.no_storage), Toast.LENGTH_LONG).show();
@@ -227,6 +235,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
 
         }
+
+    }
+
+
+    @Override
+    public void onStart() {
+        super.onStart();
+
+        LocalBroadcastManager manager = LocalBroadcastManager.getInstance(this);
+        manager.registerReceiver(mBroadcastReceiver, ScanService.getIntentFilter());
+    }
+
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(mBroadcastReceiver);
 
     }
 
