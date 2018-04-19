@@ -2,6 +2,7 @@ package com.android.deepak.filescanner;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -11,44 +12,50 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Parcelable;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.AppCompatButton;
+import android.support.v7.widget.AppCompatTextView;
+import android.support.v7.widget.SwitchCompat;
 import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
-import android.widget.ArrayAdapter;
-import android.widget.LinearLayout;
-import android.widget.ListView;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.CompoundButton;
+import android.widget.ExpandableListView;
 import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_AVG_FILESIZE;
+import static com.android.deepak.filescanner.BundleKeys.EXTRA_DATA;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_EXT_FREQ;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_LARGE_FILES;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_SCAN_PROGERESS;
+import static com.android.deepak.filescanner.BundleKeys.KEY_PROGRESS;
 import static com.android.deepak.filescanner.ScanService.SCAN_COMPLETED;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSIONS_READ_REQUEST_CODE = 100;
     private static final String TAG = MainActivity.class.getSimpleName();
-    private LinearLayout mDataContainer;
+    private static final String LIST_STATE = "list_state";
     private ProgressBar mProgressBar;
-    private ListView mFilesListView, mExtListView;
-    private AppCompatButton mScanStopBtn;
+    private ExpandableListView mFileListView;
+    private AppCompatTextView mProgressTxt;
+    private SwitchCompat mScanToggle;
+
+    private ArrayList<ScanData> dataList;
+    private int progress = 0;
+
     private boolean isScanning = false;
     private BroadcastReceiver mBroadcastReceiver;
+    private Parcelable mListState;
 
 
     public static boolean isRequestPermissionAllow(@NonNull Activity pContext,
@@ -88,25 +95,37 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initVar();
-        onNewIntent(getIntent());
 
-        // Local broadcast receiver
+        if (savedInstanceState != null) {
+            progress = savedInstanceState.getInt(KEY_PROGRESS, 0);
+            dataList = savedInstanceState.getParcelableArrayList(EXTRA_DATA);
+            updateData();
+            updateProgress();
+        } else {
+            onNewIntent(getIntent());
+        }
+
         mBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "onReceive:" + intent);
-
+                if (intent.getAction() == null) {
+                    return;
+                }
                 switch (intent.getAction()) {
                     case SCAN_COMPLETED:
-                        updateProgress(100);
                         isScanning = false;
+                        progress = 100;
+                        updateProgress();
+                        mScanToggle.setChecked(false);
+                        invalidateOptionsMenu();
                         onScanResultIntent(intent);
                         break;
 
                     case ScanService.SCAN_PROGRESS:
-                        isScanning = true;
-                        int progress = intent.getIntExtra(EXTRA_SCAN_PROGERESS, 0);
-                        updateProgress(progress);
+                        invalidateOptionsMenu();
+                        progress = intent.getIntExtra(EXTRA_SCAN_PROGERESS, 0);
+                        updateProgress();
                         break;
 
                     default:
@@ -117,14 +136,43 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     }
 
+
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (intent.getAction() != null && intent.getAction().equals(SCAN_COMPLETED)) {
             isScanning = false;
             onScanResultIntent(intent);
+        } else {
+            updateData();
         }
 
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mListState != null)
+            mFileListView.onRestoreInstanceState(mListState);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelableArrayList(EXTRA_DATA, dataList);
+
+        outState.putInt(KEY_PROGRESS, progress);
+        mListState = mFileListView.onSaveInstanceState();
+        outState.putParcelable(LIST_STATE, mListState);
+    }
+
+
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+        dataList = savedInstanceState.getParcelableArrayList(EXTRA_DATA);
+        progress = savedInstanceState.getInt(KEY_PROGRESS, 0);
+        mListState = savedInstanceState.getParcelable(LIST_STATE);
     }
 
     @Override
@@ -134,10 +182,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             if (grantResults.length <= 0) {
                 Log.i(TAG, "User interaction was cancelled.");
             } else if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-
-
+                mScanToggle.setChecked(true);
             } else {
-
                 showPermissionSnackbar();
             }
 
@@ -166,76 +212,78 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     private void onScanResultIntent(Intent intent) {
+        ArrayList<FileData> fileSizeList = intent.getParcelableArrayListExtra(EXTRA_LARGE_FILES);
+        ArrayList<FileData> mExtFreqList = intent.getParcelableArrayListExtra(EXTRA_EXT_FREQ);
+        double avgFileSize = intent.getDoubleExtra(EXTRA_AVG_FILESIZE, 0);
+        List<FileData> avgFileList = new ArrayList<>();
+        if (avgFileSize > 0) {
+            avgFileList.add(new FileData(getString(R.string.avg_file_size_title), avgFileSize));
+        }
+        dataList = new ArrayList<>();
+        dataList.add(new ScanData(getString(R.string.top_10_file_size), fileSizeList));
+        dataList.add(new ScanData(getString(R.string.top_5_ext_freq), mExtFreqList));
+        dataList.add(new ScanData(getString(R.string.avg_file_size_title), avgFileList));
+        updateData();
 
-        ArrayList<FileData> mFileSizeList = intent.getParcelableArrayListExtra(EXTRA_LARGE_FILES);
-        ArrayList<ExtnFrequency> mExtFreqList = intent.getParcelableArrayListExtra(EXTRA_EXT_FREQ);
-        long avgFileSize = intent.getLongExtra(EXTRA_AVG_FILESIZE, 0);
-
-        updateTop10Files(mFileSizeList);
-        updateTop5FreqExtn(mExtFreqList);
-        updateAvgFileSize(avgFileSize);
-    }
-
-    private void updateAvgFileSize(long avgFileSize) {
-
-    }
-
-    private void updateTop5FreqExtn(ArrayList<ExtnFrequency> extFreqList) {
-        mExtListView.setAdapter(new FreqAdapter(extFreqList));
-    }
-
-    private void updateTop10Files(ArrayList<FileData> fileSizeList) {
-        mFilesListView.setAdapter(new FileSizeAdapter(fileSizeList));
     }
 
 
-    private void updateProgress(int progress) {
+    private void updateData() {
+        mFileListView.setAdapter(new ExpandableListAdapter(MainActivity.this, dataList));
+
+
+    }
+
+
+    private void updateProgress() {
         mProgressBar.setProgress(progress);
+        mProgressTxt.setText(String.format(Locale.getDefault(), "%d %%", progress));
     }
 
     private void initVar() {
-        mDataContainer = findViewById(R.id.scan_data_container);
         mProgressBar = findViewById(R.id.progressBar);
-        mFilesListView = findViewById(R.id.large_files_list);
-        mExtListView = findViewById(R.id.files_ext_list);
-        mScanStopBtn = findViewById(R.id.start_stop_scan);
-        mScanStopBtn.setOnClickListener(this);
+        mFileListView = findViewById(R.id.dataList);
+        mScanToggle = findViewById(R.id.start_stop_scan);
+
+        mProgressTxt = findViewById(R.id.progress_data);
+        mScanToggle.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked) {
+                    startScan();
+                } else {
+                    stopScan();
+                }
+            }
+        });
+        progress = 0;
+        dataList = new ArrayList<>();
     }
 
-    @Override
-    public void onClick(View v) {
+    private void stopScan() {
+        stopService(new Intent(this, ScanService.class));
+        progress = 0;
+        isScanning = false;
+        updateProgress();
+    }
 
-        switch (v.getId()) {
-
-            case R.id.start_stop_scan:
-                if (!isRequestPermissionAllow(MainActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE})) {
-                    return;
-                }
-
-                Intent intent;
-                isScanning = !isScanning;
-                if (isScanning) {
-
-
-                    String sdCardState = Environment.getExternalStorageState();
-                    if (!sdCardState.equals(Environment.MEDIA_MOUNTED)) {
-                        Toast.makeText(MainActivity.this, getString(R.string.no_storage), Toast.LENGTH_LONG).show();
-                        return;
-                    } else {
-                        intent = new Intent(this, ScanService.class)
-                                .setAction(ScanService.ACTION_SCAN);
-                        startService(intent);
-                    }
-                } else {
-                    stopService(new Intent(this, ScanService.class));
-                }
-                break;
-
-            default:
-                break;
-
+    private void startScan() {
+        if (!isRequestPermissionAllow(MainActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE})) {
+            return;
         }
 
+        String sdCardState = Environment.getExternalStorageState();
+        if (!sdCardState.equals(Environment.MEDIA_MOUNTED)) {
+            Toast.makeText(MainActivity.this, getString(R.string.no_storage), Toast.LENGTH_LONG).show();
+        } else {
+            if (!isMyServiceRunning(ScanService.class.getSimpleName())) {
+                Intent intent = new Intent(this, ScanService.class)
+                        .setAction(ScanService.ACTION_SCAN);
+                startService(intent);
+                isScanning = true;
+            }
+
+        }
     }
 
 
@@ -260,6 +308,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         showMessageDialog(getString(R.string.alert), getString(R.string.app_exit_alert), new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                stopService(new Intent(MainActivity.this, ScanService.class));
                 finish();
             }
         });
@@ -282,109 +331,49 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         ad.show();
     }
 
-    private class FileSizeAdapter extends ArrayAdapter<FileData> {
 
-        Context mContext;
-        private int lastPosition = -1;
-
-        public FileSizeAdapter(ArrayList<FileData> data) {
-            super(MainActivity.this, R.layout.list_item, data);
-
-
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-
-            FileData fileData = getItem(position);
-
-            ViewHolder viewHolder;
-
-            final View result;
-
-            if (convertView == null) {
-
-                viewHolder = new ViewHolder();
-                LayoutInflater inflater = LayoutInflater.from(getContext());
-                convertView = inflater.inflate(R.layout.list_item, parent, false);
-                viewHolder.txtName = convertView.findViewById(R.id.name);
-                viewHolder.txtValue = convertView.findViewById(R.id.value);
-
-                result = convertView;
-
-                convertView.setTag(viewHolder);
-            } else {
-                viewHolder = (ViewHolder) convertView.getTag();
-                result = convertView;
-            }
-
-            Animation animation = AnimationUtils.loadAnimation(mContext, (position > lastPosition) ? R.anim.up_from_bottom : R.anim.down_from_top);
-            result.startAnimation(animation);
-            lastPosition = position;
-
-            viewHolder.txtName.setText(fileData.getFilename());
-            viewHolder.txtValue.setText(String.valueOf(fileData.getFilesize()));
-            // Return the completed view to render on screen
-            return convertView;
-        }
-
-        // View lookup cache
-        private class ViewHolder {
-            TextView txtName;
-            TextView txtValue;
-        }
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.scan_menu, menu);
+        return super.onCreateOptionsMenu(menu);
     }
 
-    private class FreqAdapter extends ArrayAdapter<ExtnFrequency> {
-
-        Context mContext;
-        private int lastPosition = -1;
-
-        public FreqAdapter(ArrayList<ExtnFrequency> data) {
-            super(MainActivity.this, R.layout.list_item, data);
-
-
-        }
-
-        @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
-
-            ExtnFrequency extFreq = getItem(position);
-
-            ViewHolder viewHolder;
-
-            final View result;
-
-            if (convertView == null) {
-
-                viewHolder = new ViewHolder();
-                LayoutInflater inflater = LayoutInflater.from(getContext());
-                convertView = inflater.inflate(R.layout.list_item, parent, false);
-                viewHolder.txtName = convertView.findViewById(R.id.name);
-                viewHolder.txtValue = convertView.findViewById(R.id.value);
-
-                result = convertView;
-
-                convertView.setTag(viewHolder);
-            } else {
-                viewHolder = (ViewHolder) convertView.getTag();
-                result = convertView;
-            }
-
-            Animation animation = AnimationUtils.loadAnimation(mContext, (position > lastPosition) ? R.anim.up_from_bottom : R.anim.down_from_top);
-            result.startAnimation(animation);
-            lastPosition = position;
-
-            viewHolder.txtName.setText(extFreq.getExtension());
-            viewHolder.txtValue.setText(String.valueOf(extFreq.getFrequency()));
-            // Return the completed view to render on screen
-            return convertView;
-        }
-
-        // View lookup cache
-        private class ViewHolder {
-            TextView txtName;
-            TextView txtValue;
-        }
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
+        menu.findItem(R.id.share).setEnabled(!isScanning);
+        return super.onPrepareOptionsMenu(menu);
     }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+
+        if (item.getItemId() == R.id.share) {
+            if (dataList.size() > 0) {
+                Intent sharingIntent = new Intent(android.content.Intent.ACTION_SEND);
+                sharingIntent.setType("text/plain");
+                sharingIntent.putExtra(android.content.Intent.EXTRA_SUBJECT, "ScanData");
+                sharingIntent.putExtra(android.content.Intent.EXTRA_TEXT, dataList.toString());
+                startActivity(Intent.createChooser(sharingIntent, "Share via"));
+            } else {
+                Toast.makeText(MainActivity.this, "Please scan the storage.", Toast.LENGTH_LONG).show();
+            }
+        }
+
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    public boolean isMyServiceRunning(String className) {
+        ActivityManager manager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        assert manager != null;
+        for (ActivityManager.RunningServiceInfo service : manager
+                .getRunningServices(Integer.MAX_VALUE)) {
+            if ((getPackageName() + "." + className)
+                    .equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

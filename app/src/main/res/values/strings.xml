@@ -15,4 +15,7 @@
     <string name="permission_required_explanation">Read permission is required to read the files from your storage.</string>
     <string name="permission_req">Permission Required</string>
     <string name="crash_toast_text">App Crashed</string>
+    <string name="top_10_file_size">Top 10 files by size.</string>
+    <string name="top_5_ext_freq">Top 5 File Extension with frequency.</string>
+    <string name="share">Share</string>
 </resources>

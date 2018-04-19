@@ -1,9 +1,9 @@
 package com.android.deepak.filescanner;
 
+import android.app.IntentService;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -30,7 +30,7 @@ import static com.android.deepak.filescanner.BundleKeys.EXTRA_LARGE_FILES;
 import static com.android.deepak.filescanner.BundleKeys.EXTRA_SCAN_PROGERESS;
 import static com.android.deepak.filescanner.BundleKeys.KEY_MSG;
 
-public class ScanService extends Service {
+public class ScanService extends IntentService {
 
     /**
      * Actions
@@ -38,16 +38,20 @@ public class ScanService extends Service {
     public static final String ACTION_SCAN = "action_scan";
     public static final String SCAN_COMPLETED = "scan_completed";
     public static final String SCAN_PROGRESS = "scan_progress";
+    public static final String SCAN_ABORT = "scan_abort";
     private static final String TAG = ScanService.class.getSimpleName();
     private static final int PROGRESS_NOTIFICATION_ID = 0;
     private static final int FINISHED_NOTIFICATION_ID = 1;
     private static final String CHANNEL_ID_DEFAULT = "default";
-    private List<FileData> fileList;
+    private List<FileData> fileList, extnList;
     private List<String> extensionList;
-    private List<ExtnFrequency> extnList;
-    private long totalSize = 0;
-    private long scanSize = 0;
-    private Set<String> extensionSet;
+    private double totalSize = 0;
+    private double scanSize = 0;
+    private boolean isRunning = false;
+
+    public ScanService() {
+        super(ScanService.class.getSimpleName());
+    }
 
     public static IntentFilter getIntentFilter() {
         IntentFilter filter = new IntentFilter();
@@ -84,67 +88,66 @@ public class ScanService extends Service {
     }
 
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        Log.d(TAG, "onStartCommand:" + intent + ":" + startId);
+    protected void onHandleIntent(Intent intent) {
 
         if (ACTION_SCAN.equals(intent.getAction())) {
             fileList = new ArrayList<>();
-            extensionSet = new HashSet<>();
+
             extnList = new ArrayList<>();
             extensionList = new ArrayList<>();
-            if (startScan()) {
+            isRunning = true;
+            startScan();
+            if (isRunning) {
                 Collections.sort(fileList, new Comparator<FileData>() {
                     @Override
                     public int compare(FileData o1, FileData o2) {
-                        return (int) (o2.getFilesize() - o1.getFilesize());
+                        return Double.valueOf(o2.getValue()).compareTo(o1.getValue());
                     }
                 });
-                Log.e("FileList", fileList.toString());
-
-                extensionSet = new HashSet<>(extensionList);
+                Set<String> extensionSet = new HashSet<>(extensionList);
                 int freq;
                 for (String ext : extensionSet) {
                     freq = Collections.frequency(extensionList, ext);
-                    extnList.add(new ExtnFrequency(ext, freq));
+                    extnList.add(new FileData(ext, freq));
                 }
-                Collections.sort(extnList, new Comparator<ExtnFrequency>() {
+                Collections.sort(extnList, new Comparator<FileData>() {
                     @Override
-                    public int compare(ExtnFrequency ef1, ExtnFrequency ef2) {
-                        return ef2.getFrequency() - ef1.getFrequency();
+                    public int compare(FileData o1, FileData o2) {
+                        return Double.valueOf(o2.getValue()).compareTo(o1.getValue());
                     }
                 });
+                broadcastScanFinished();
+                showScanFinishedNotification();
+            } else {
+                stopSelf();
             }
         }
 
-        return START_REDELIVER_INTENT;
     }
 
-    private boolean startScan() {
+
+    private void startScan() {
         fileList = new ArrayList<>();
-        File root = Environment.getExternalStorageDirectory();
-        totalSize = root.length();
-        return listFilesAndFilesSubDirectories(root);
+        File root = Environment.getExternalStoragePublicDirectory("");
+        totalSize = (root.getTotalSpace() - root.getUsableSpace()) / (1024 * 1024);
+        listFilesAndFilesSubDirectories(root);
 
     }
 
 
-    public boolean listFilesAndFilesSubDirectories(File dir) {
-        if (dir != null && dir.canRead()) {
-            if (dir.isDirectory()) {
-                //noinspection ConstantConditions
-                for (File file : dir.listFiles()) {
-                    if (file.isFile()) {
-                        readFileData(file);
-                    } else {
-                        listFilesAndFilesSubDirectories(file);
-                    }
-                }
-            } else if (dir.isFile()) {
-                readFileData(dir);
+    public void listFilesAndFilesSubDirectories(File dir) {
+
+        for (File file : dir.listFiles()) {
+            if (!isRunning) {
+                break;
+            }
+            if (file.isFile()) {
+                readFileData(file);
+            } else {
+                listFilesAndFilesSubDirectories(file);
             }
         }
 
-        return true;
     }
 
 
@@ -156,17 +159,18 @@ public class ScanService extends Service {
     }
 
     public void readFileData(File file) {
-        scanSize += file.length();
-        fileList.add(new FileData(file.getName(), file.length()));
+        scanSize += (file.length() / (1024 * 1024));
+        fileList.add(new FileData(file.getName(), file.length() / (1024 * 1024)));
         extensionList.add(getExt(file.getAbsolutePath()));
         broadcastScanProgress(scanSize, totalSize);
-        showProgressNotification(String.format(Locale.getDefault(), "%d/ %d", scanSize, totalSize), scanSize, totalSize);
+
+        showProgressNotification(String.format(Locale.getDefault(), "%.2f MB/%.2f MB", scanSize, totalSize), scanSize, totalSize);
     }
 
     /**
      * Show notification with a progress bar.
      */
-    protected void showProgressNotification(String caption, long completedUnits, long totalUnits) {
+    protected void showProgressNotification(String caption, double completedUnits, double totalUnits) {
         int percentComplete = 0;
         if (totalUnits > 0) {
             percentComplete = (int) (100 * completedUnits / totalUnits);
@@ -210,29 +214,29 @@ public class ScanService extends Service {
         }
     }
 
-    private boolean broadcastScanProgress(long completedUnits, long totalUnits) {
+    private void broadcastScanProgress(double completedUnits, double totalUnits) {
         int percentComplete = 0;
         if (totalUnits > 0) {
             percentComplete = (int) (100 * completedUnits / totalUnits);
         }
         Intent broadcast = new Intent(SCAN_PROGRESS)
                 .putExtra(EXTRA_SCAN_PROGERESS, percentComplete);
-        return LocalBroadcastManager.getInstance(getApplicationContext())
+        LocalBroadcastManager.getInstance(getApplicationContext())
                 .sendBroadcast(broadcast);
     }
 
-    private boolean broadcastScanFinished() {
+    private void broadcastScanFinished() {
         Intent broadcast = new Intent(SCAN_COMPLETED)
                 .putParcelableArrayListExtra(EXTRA_LARGE_FILES, getTop10FileBySize())
                 .putParcelableArrayListExtra(EXTRA_EXT_FREQ, getTop5FreqExt())
                 .putExtra(EXTRA_AVG_FILESIZE, getAvgFileSize())
                 .putExtra(KEY_MSG, getString(R.string.scan_success));
-        return LocalBroadcastManager.getInstance(getApplicationContext())
+        LocalBroadcastManager.getInstance(getApplicationContext())
                 .sendBroadcast(broadcast);
     }
 
-    private long getAvgFileSize() {
-        return totalSize / fileList.size();
+    private double getAvgFileSize() {
+        return scanSize / fileList.size();
     }
 
     private void showScanFinishedNotification() {
@@ -250,16 +254,20 @@ public class ScanService extends Service {
 
     private ArrayList<FileData> getTop10FileBySize() {
         if (fileList.size() > 10) {
+            Log.e("FileList", fileList.subList(0, 9).toString());
             return new ArrayList<>(fileList.subList(0, 9));
         } else {
+            Log.e("FileList", fileList.toString());
             return new ArrayList<>(fileList);
         }
     }
 
-    private ArrayList<ExtnFrequency> getTop5FreqExt() {
+    private ArrayList<FileData> getTop5FreqExt() {
         if (extnList.size() > 5) {
+            Log.e("ExtList", extnList.subList(0, 4).toString());
             return new ArrayList<>(extnList.subList(0, 4));
         } else {
+            Log.e("ExtList", extnList.toString());
             return new ArrayList<>(extnList);
         }
     }
@@ -275,8 +283,8 @@ public class ScanService extends Service {
 
     @Override
     public void onDestroy() {
+        isRunning = false;
         dismissProgressNotification();
         super.onDestroy();
-
     }
 }

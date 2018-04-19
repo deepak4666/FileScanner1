@@ -10,4 +10,6 @@ public interface BundleKeys {
     String EXTRA_AVG_FILESIZE = "extra_avg_filesize";
     String EXTRA_SCAN_PROGERESS = "scan_progress";
     String KEY_MSG = "message";
+
+    String EXTRA_DATA = "data";
 }
